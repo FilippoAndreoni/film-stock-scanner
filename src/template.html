@@ -39,6 +39,11 @@
   .win{position:absolute;inset:0;border-radius:14px;border:2px solid rgba(255,255,255,.75);transition:border-color .15s, box-shadow .15s;pointer-events:none}
   .win::after{content:"";position:absolute;left:8px;right:8px;top:50%;height:1px;background:rgba(226,64,44,.8)}
   .win.hit{border-color:var(--ok);box-shadow:0 0 0 4px rgba(60,207,122,.45) inset}
+  .okfx{position:absolute;inset:0;display:grid;place-items:center;background:rgba(60,207,122,.32);
+    border-radius:14px;opacity:0;transition:opacity .08s ease-out;pointer-events:none}
+  .okfx.on{opacity:1}
+  .okfx svg{width:22%;max-width:84px;height:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35));transform:scale(.8);transition:transform .15s ease-out}
+  .okfx.on svg{transform:scale(1)}
   .camhint{text-align:center;font-size:13px;color:var(--muted);margin-top:8px}
   .camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#111}
   .camoff p{margin:0;max-width:300px}
@@ -60,7 +65,11 @@
   @keyframes flash{0%{background:#2d4a37}100%{background:var(--panel)}}
   .badge{flex:none;width:46px;height:34px;border-radius:7px;display:grid;place-items:center;
     font:700 12px var(--mono);color:#000;background:var(--kodak)}
-  .badge.D{background:#ffd76a}.badge.T{background:#8fb8ff}.badge.X{background:#ccc}
+  .badge.s50D{background:#FFFCFF;color:#111}
+  .badge.s250D{background:#247BA0;color:#fff}
+  .badge.s200T{background:#F0C105;color:#111}
+  .badge.s500T{background:#AA1D0E;color:#fff}
+  .badge.sX{background:#5a5850;color:#fff}
   .item .t{font-weight:600}
   .item .s{font:12px var(--mono);color:var(--muted);margin-top:2px}
   .item .grow{flex:1;min-width:0}
@@ -110,6 +119,9 @@
     <div class="cam" id="cam">
       <video id="video" playsinline muted autoplay></video>
       <div class="win" id="win"></div>
+      <div class="okfx" id="okfx"><svg viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#3ccf7a"/>
+        <path d="M18 33l9 9 19-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="camoff" id="camoff"><button class="btn" id="startBtn">Avvia fotocamera</button></div>
     </div>
     <div class="camhint" id="camhint">Inquadra nel riquadro i codici a barre dell'etichetta</div>
@@ -203,7 +215,9 @@ const WASM_B64 = "__WASM_B64__";
     } catch (e) {}
   }
   function hit() {
-    const w = $("win"); w.classList.add("hit"); setTimeout(() => w.classList.remove("hit"), 450);
+    const w = $("win"), fx = $("okfx");
+    w.classList.add("hit"); fx.classList.add("on");
+    clearTimeout(hit.t); hit.t = setTimeout(() => { w.classList.remove("hit"); fx.classList.remove("on"); }, 500);
     beep();
   }
   const lastFlash = {};
@@ -224,7 +238,8 @@ const WASM_B64 = "__WASM_B64__";
 
   // ---------- Render ----------
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const badgeClass = r => /D$/.test(r.speed) ? "D" : /T$/.test(r.speed) ? "T" : "X";
+  // Colori standard: 50D bianco, 250D azzurro, 200T giallo, 500T rosso
+  const badgeClass = r => ["50D", "250D", "200T", "500T"].includes(r.speed) ? "s" + r.speed : "sX";
   function itemHTML(r, isNew) {
     return `<li class="item${isNew ? " new" : ""}" data-lot="${r.lot}">
       <div class="badge ${badgeClass(r)}">${esc(r.speed.split("/")[0])}</div>
