@@ -44,6 +44,10 @@
   .okfx.on{opacity:1}
   .okfx svg{width:22%;max-width:84px;height:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35));transform:scale(.8);transition:transform .15s ease-out}
   .okfx.on svg{transform:scale(1)}
+  .okfx .dup{display:none;background:#3ccf7a;color:#fff;font-weight:700;font-size:17px;letter-spacing:.2px;
+    padding:10px 18px;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+  .okfx.dupmode svg{display:none}
+  .okfx.dupmode .dup{display:block}
   .camhint{text-align:center;font-size:13px;color:var(--muted);margin-top:8px}
   .camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#111}
   .camoff p{margin:0;max-width:300px}
@@ -121,7 +125,8 @@
       <div class="win" id="win"></div>
       <div class="okfx" id="okfx"><svg viewBox="0 0 64 64" aria-hidden="true">
         <circle cx="32" cy="32" r="30" fill="#3ccf7a"/>
-        <path d="M18 33l9 9 19-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <path d="M18 33l9 9 19-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="dup">Already scanned</div></div>
       <div class="camoff" id="camoff"><button class="btn" id="startBtn">Avvia fotocamera</button></div>
     </div>
     <div class="camhint" id="camhint">Inquadra nel riquadro i codici a barre dell'etichetta</div>
@@ -195,6 +200,7 @@ const WASM_B64 = "__WASM_B64__";
       if (lots.has(roll.lot)) { flashExisting(roll.lot); continue; } // già presente
       roll.scannedAt = new Date().toISOString();
       lots.add(roll.lot); inventory.push(roll); session.unshift(roll);
+      lastSeen[roll.lot] = Date.now();
       added = true;
     }
     if (added) { save(); renderSession(true); renderInventory(); hit(); }
@@ -214,16 +220,19 @@ const WASM_B64 = "__WASM_B64__";
       o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.1);
     } catch (e) {}
   }
-  function hit() {
+  function hit(dup) {
     const w = $("win"), fx = $("okfx");
+    fx.classList.toggle("dupmode", !!dup);
     w.classList.add("hit"); fx.classList.add("on");
     clearTimeout(hit.t); hit.t = setTimeout(() => { w.classList.remove("hit"); fx.classList.remove("on"); }, 500);
-    beep();
+    if (!dup) beep();
   }
-  const lastFlash = {};
+  // "Already scanned" solo quando la lattina rientra nel riquadro, non mentre resta inquadrata
+  const lastSeen = {};
   function flashExisting(lot) {
-    if (Date.now() - (lastFlash[lot] || 0) < 2000) return; // lattina ancora inquadrata: niente lampeggio continuo
-    lastFlash[lot] = Date.now();
+    const prev = lastSeen[lot] || 0; lastSeen[lot] = Date.now();
+    if (Date.now() - prev < 1500) return;
+    hit(true);
     const el = document.querySelector(`[data-lot="${lot}"]`);
     if (el && !el.classList.contains("flash")) {
       el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 700);
