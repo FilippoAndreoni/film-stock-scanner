@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0d0c">
+<title>Film Stock Scanner</title>
+<style>
+  :root{
+    --bg:#0d0d0c; --panel:#171715; --line:#2a2a27; --text:#f2efe6; --muted:#8f8b80;
+    --kodak:#f5b400; --ok:#3ccf7a; --red:#e2402c;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height:100vh}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 0}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .brand .dot{width:22px;height:22px;border-radius:5px;background:var(--kodak);
+    display:grid;place-items:center;color:#000;font-weight:800;font-size:13px}
+  .brand h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px}
+  .tabs{display:flex;gap:4px;background:var(--panel);border-radius:10px;padding:3px}
+  .tabs button{flex:1;border:0;background:transparent;color:var(--muted);padding:9px 6px;border-radius:8px;
+    font:600 14px/1 inherit;font-family:inherit}
+  .tabs button.on{background:#2b2a26;color:var(--text)}
+  .count{display:inline-block;min-width:20px;padding:2px 6px;border-radius:10px;background:var(--kodak);
+    color:#000;font-size:12px;margin-left:4px}
+  main{padding:12px 16px 40px}
+  .view{display:none}.view.on{display:block}
+
+  /* Camera */
+  .cam{position:relative;width:100%;aspect-ratio:3/4;max-height:50vh;border-radius:16px;overflow:hidden;background:#000}
+  .cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .win{position:absolute;left:7%;right:7%;top:38%;height:24%;border-radius:10px;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.85);transition:border-color .15s, box-shadow .15s}
+  .win::after{content:"";position:absolute;left:8px;right:8px;top:50%;height:1px;background:rgba(226,64,44,.8)}
+  .win.hit{border-color:var(--ok);box-shadow:0 0 0 9999px rgba(0,0,0,.55),0 0 0 4px rgba(60,207,122,.35) inset}
+  .camhint{position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:13px;color:#ddd;text-shadow:0 1px 3px #000}
+  .camoff{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    padding:24px;text-align:center;color:var(--muted)}
+  .camoff p{margin:0;max-width:300px}
+  .btn{border:0;border-radius:12px;padding:12px 16px;font:600 15px inherit;font-family:inherit;color:#000;background:var(--kodak)}
+  .btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+  .btn.small{padding:8px 12px;font-size:13px;border-radius:10px}
+  .btn.danger{background:transparent;color:var(--red);border:1px solid #4a2520}
+  .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .row .btn{flex:1}
+  .iconbtn{position:absolute;top:10px;width:40px;height:40px;border-radius:20px;border:0;
+    background:rgba(0,0,0,.5);color:#fff;font-size:18px;display:grid;place-items:center}
+
+  /* Lists */
+  h2{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:18px 0 8px;font-weight:600}
+  .list{list-style:none;margin:0;padding:0}
+  .item{display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--panel);border-radius:12px;margin-bottom:6px}
+  .item.new{animation:slide .35s ease-out}
+  .item.flash{animation:flash .7s ease-out}
+  @keyframes slide{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  @keyframes flash{0%{background:#2d4a37}100%{background:var(--panel)}}
+  .badge{flex:none;width:46px;height:34px;border-radius:7px;display:grid;place-items:center;
+    font:700 12px var(--mono);color:#000;background:var(--kodak)}
+  .badge.D{background:#ffd76a}.badge.T{background:#8fb8ff}.badge.X{background:#ccc}
+  .item .t{font-weight:600}
+  .item .s{font:12px var(--mono);color:var(--muted);margin-top:2px}
+  .item .grow{flex:1;min-width:0}
+  .item .x{border:0;background:transparent;color:var(--muted);font-size:20px;padding:4px 6px}
+  .empty{color:var(--muted);text-align:center;padding:22px 10px;font-size:14px}
+
+  /* Inventory */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat{background:var(--panel);border-radius:12px;padding:12px}
+  .stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--muted)}
+  .gauge{margin-top:18px}
+  .gauge>h3{font-size:20px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:baseline}
+  .gauge>h3 small{font-size:13px;color:var(--muted);font-weight:500}
+  details.stock{background:var(--panel);border-radius:12px;margin-bottom:8px;overflow:hidden}
+  details.stock summary{list-style:none;display:flex;align-items:center;gap:12px;padding:12px;cursor:pointer}
+  details.stock summary::-webkit-details-marker{display:none}
+  .lens{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .chip{font:12px var(--mono);background:#24231f;border-radius:6px;padding:2px 7px;color:#d8d3c4}
+  .rolls{border-top:1px solid var(--line);padding:4px 12px 8px}
+  .roll{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);
+    font:13px var(--mono);color:#d8d3c4}
+  .roll:last-child{border-bottom:0}
+  .roll button{border:0;background:transparent;color:var(--muted);font-size:18px}
+  .tot{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+
+  /* Modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:20;padding:16px}
+  .modal.on{display:flex}
+  .sheet{background:#1c1b18;border-radius:16px;padding:18px;width:100%;max-width:440px}
+  .sheet p{margin:0 0 14px}
+  textarea{width:100%;height:160px;background:#0f0f0e;color:var(--text);border:1px solid var(--line);border-radius:10px;font:11px var(--mono);padding:8px}
+  .note{font-size:12px;color:var(--muted);margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="dot">K</div><h1>Film Stock Scanner</h1></div>
+  <div class="tabs">
+    <button id="tabScan" class="on">Scansione</button>
+    <button id="tabInv">Inventario <span class="count" id="invCount">0</span></button>
+  </div>
+</header>
+
+<main>
+  <section id="viewScan" class="view on">
+    <div class="cam" id="cam">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="win" id="win"></div>
+      <div class="camhint" id="camhint" hidden>Inquadra i codici a barre dell'etichetta</div>
+      <button class="iconbtn" id="torchBtn" style="right:10px" hidden aria-label="Torcia">🔦</button>
+      <button class="iconbtn" id="soundBtn" style="left:10px" aria-label="Suono">🔔</button>
+      <div class="camoff" id="camoff">
+        <p id="camoffText">Punta la fotocamera sull'etichetta della lattina: i rulli vengono aggiunti da soli.</p>
+        <button class="btn" id="startBtn">Avvia fotocamera</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="btn ghost" style="text-align:center">
+        Scansiona da foto
+        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+      </label>
+    </div>
+    <h2>Aggiunti in questa sessione</h2>
+    <ul class="list" id="sessionList"></ul>
+    <div class="empty" id="sessionEmpty">Nessun rullo ancora.</div>
+  </section>
+
+  <section id="viewInv" class="view">
+    <div class="stats">
+      <div class="stat"><b id="stRolls">0</b><span>rulli</span></div>
+      <div class="stat"><b id="stFeet">0</b><span>piedi totali</span></div>
+      <div class="stat"><b id="stStocks">0</b><span>emulsioni</span></div>
+    </div>
+    <div id="invBody"></div>
+    <div class="row">
+      <button class="btn ghost small" id="csvBtn">Esporta CSV</button>
+      <button class="btn danger small" id="clearBtn">Svuota inventario</button>
+    </div>
+    <p class="note">L'inventario è salvato in questo browser su questo dispositivo. Esporta il CSV per conservarlo.</p>
+  </section>
+</main>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script>/*__ZXING__*/</script>
+<script>/*__PARSER__*/</script>
+<script>
+const WASM_B64 = "__WASM_B64__";
+(() => {
+  const $ = id => document.getElementById(id);
+  const STORE_KEY = "film-inventory-v1";
+
+  // ---------- Stato ----------
+  let inventory = [];
+  try { inventory = JSON.parse(localStorage.getItem(STORE_KEY) || "[]"); } catch (e) { inventory = []; }
+  const lots = new Set(inventory.map(r => r.lot));
+  const session = [];
+  let soundOn = true;
+  try { soundOn = localStorage.getItem("film-sound") !== "off"; } catch (e) {}
+  const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(inventory)); } catch (e) {} };
+
+  // ---------- ZXing ----------
+  const wasmBytes = Uint8Array.from(atob(WASM_B64), c => c.charCodeAt(0));
+  ZXingWASM.prepareZXingModule({
+    overrides: {
+      instantiateWasm(imports, ok) {
+        WebAssembly.instantiate(wasmBytes, imports).then(({ instance }) => ok(instance));
+        return {};
+      }
+    },
+    fireImmediately: true
+  });
+  const READ_OPTS = { formats: ["Code128"], tryHarder: true, tryRotate: true, tryInvert: false,
+                      maxNumberOfSymbols: 4, textMode: "HRI" };
+
+  // ---------- Aggiunta ----------
+  function handleTexts(texts) {
+    let added = false;
+    for (const t of texts) {
+      const roll = parseKodakCan(t);
+      if (!roll) continue;                       // non è il nostro codice: ignorato
+      if (lots.has(roll.lot)) { flashExisting(roll.lot); continue; } // già presente
+      roll.scannedAt = new Date().toISOString();
+      lots.add(roll.lot); inventory.push(roll); session.unshift(roll);
+      added = true;
+    }
+    if (added) { save(); renderSession(true); renderInventory(); hit(); }
+    return added;
+  }
+
+  // ---------- Feedback ----------
+  let actx;
+  function beep() {
+    if (!soundOn) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = 1760; o.type = "square";
+      g.gain.setValueAtTime(0.06, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.09);
+      o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.1);
+    } catch (e) {}
+  }
+  function hit() {
+    const w = $("win"); w.classList.add("hit"); setTimeout(() => w.classList.remove("hit"), 450);
+    beep();
+  }
+  function flashExisting(lot) {
+    const el = document.querySelector(`[data-lot="${lot}"]`);
+    if (el && !el.classList.contains("flash")) {
+      el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 700);
+    }
+  }
+  $("soundBtn").onclick = () => {
+    soundOn = !soundOn; $("soundBtn").textContent = soundOn ? "🔔" : "🔕";
+    try { localStorage.setItem("film-sound", soundOn ? "on" : "off"); } catch (e) {}
+    if (soundOn) beep();
+  };
+  $("soundBtn").textContent = soundOn ? "🔔" : "🔕";
+
+  // ---------- Render ----------
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const badgeClass = r => /D$/.test(r.speed) ? "D" : /T$/.test(r.speed) ? "T" : "X";
+  function itemHTML(r, isNew) {
+    return `<li class="item${isNew ? " new" : ""}" data-lot="${r.lot}">
+      <div class="badge ${badgeClass(r)}">${esc(r.speed.split("/")[0])}</div>
+      <div class="grow"><div class="t">${esc(r.name)}</div>
+      <div class="s">${r.gauge} · ${r.feet} ft · ${esc(r.emulsion)}</div></div>
+      <button class="x" data-del="${r.lot}" aria-label="Rimuovi">×</button></li>`;
+  }
+  function renderSession(animateFirst) {
+    $("sessionList").innerHTML = session.map((r, i) => itemHTML(r, animateFirst && i === 0)).join("");
+    $("sessionEmpty").hidden = session.length > 0;
+  }
+  function renderInventory() {
+    $("invCount").textContent = inventory.length;
+    $("stRolls").textContent = inventory.length;
+    $("stFeet").textContent = inventory.reduce((a, r) => a + r.feet, 0).toLocaleString("it-IT");
+    const order = ["35mm", "16mm", "Super 8"];
+    const byGauge = {};
+    for (const r of inventory) ((byGauge[r.gauge] ||= {})[r.name] ||= []).push(r);
+    $("stStocks").textContent = Object.values(byGauge).reduce((a, g) => a + Object.keys(g).length, 0);
+    const gauges = Object.keys(byGauge).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    if (!gauges.length) { $("invBody").innerHTML = `<div class="empty">Inventario vuoto. Scansiona una lattina.</div>`; return; }
+    $("invBody").innerHTML = gauges.map(g => {
+      const stocks = byGauge[g];
+      const gFeet = Object.values(stocks).flat().reduce((a, r) => a + r.feet, 0);
+      const gRolls = Object.values(stocks).flat().length;
+      const names = Object.keys(stocks).sort((a, b) => speedSort(stocks[a][0]) - speedSort(stocks[b][0]));
+      return `<div class="gauge"><h3>${g}<small>${gRolls} rulli · ${gFeet.toLocaleString("it-IT")} ft</small></h3>` +
+        names.map(n => {
+          const rolls = stocks[n].slice().sort((a, b) => a.lot.localeCompare(b.lot));
+          const byLen = {};
+          rolls.forEach(r => byLen[r.feet] = (byLen[r.feet] || 0) + 1);
+          const feet = rolls.reduce((a, r) => a + r.feet, 0);
+          const r0 = rolls[0];
+          return `<details class="stock"><summary>
+              <div class="badge ${badgeClass(r0)}">${esc(r0.speed.split("/")[0])}</div>
+              <div class="grow" style="flex:1;min-width:0"><div class="t" style="font-weight:600">${esc(n)}</div>
+                <div class="lens">${Object.keys(byLen).sort((a, b) => b - a).map(l => `<span class="chip">${l} ft × ${byLen[l]}</span>`).join("")}</div></div>
+              <div class="tot">${feet.toLocaleString("it-IT")} ft</div></summary>
+            <div class="rolls">${rolls.map(r => `<div class="roll" data-lot="${r.lot}"><span>${esc(r.emulsion)} · ${r.feet} ft</span>
+              <button data-del="${r.lot}" aria-label="Rimuovi">×</button></div>`).join("")}</div></details>`;
+        }).join("") + `</div>`;
+    }).join("");
+  }
+  const speedSort = r => { const n = parseInt(r.speed, 10) || 0; return (/T$/.test(r.speed) ? 10000 : 0) + n; };
+
+  document.addEventListener("click", e => {
+    const lot = e.target.closest("[data-del]")?.dataset.del;
+    if (!lot) return;
+    inventory = inventory.filter(r => r.lot !== lot); lots.delete(lot);
+    const i = session.findIndex(r => r.lot === lot); if (i >= 0) session.splice(i, 1);
+    save(); renderSession(); renderInventory();
+  });
+
+  // ---------- Tab ----------
+  function tab(which) {
+    $("tabScan").classList.toggle("on", which === "scan");
+    $("tabInv").classList.toggle("on", which === "inv");
+    $("viewScan").classList.toggle("on", which === "scan");
+    $("viewInv").classList.toggle("on", which === "inv");
+  }
+  $("tabScan").onclick = () => tab("scan");
+  $("tabInv").onclick = () => tab("inv");
+
+  // ---------- Fotocamera ----------
+  const video = $("video");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let stream = null, busy = false, torch = false;
+
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) return camUnavailable();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+    } catch (e) { return camUnavailable(e); }
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    $("camoff").hidden = true; $("camhint").hidden = false;
+    const track = stream.getVideoTracks()[0];
+    try {
+      const caps = track.getCapabilities?.() || {};
+      if (caps.torch) $("torchBtn").hidden = false;
+      if (caps.focusMode?.includes("continuous")) track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+    } catch (e) {}
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {} // sblocca l'audio su iOS
+    loop();
+  }
+  function camUnavailable() {
+    $("camoffText").textContent = "Fotocamera live non disponibile in questa finestra. Apri la pagina in Safari (via https) oppure usa “Scansiona da foto”.";
+    $("startBtn").hidden = true;
+  }
+  $("startBtn").onclick = startCamera;
+  $("torchBtn").onclick = () => {
+    const track = stream?.getVideoTracks()[0]; if (!track) return;
+    torch = !torch; track.applyConstraints({ advanced: [{ torch }] }).catch(() => {});
+  };
+
+  // Ritaglia dal video solo l'area della finestra di scansione
+  function cropWindow() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    const cam = $("cam").getBoundingClientRect(), win = $("win").getBoundingClientRect();
+    const scale = Math.max(cam.width / vw, cam.height / vh);
+    const ox = (cam.width - vw * scale) / 2, oy = (cam.height - vh * scale) / 2;
+    // margine extra per non tagliare i bordi del codice
+    const padX = win.width * 0.06, padY = win.height * 0.25;
+    let sx = (win.left - cam.left - ox - padX) / scale, sy = (win.top - cam.top - oy - padY) / scale;
+    let sw = (win.width + 2 * padX) / scale, sh = (win.height + 2 * padY) / scale;
+    sx = Math.max(0, sx); sy = Math.max(0, sy); sw = Math.min(vw - sx, sw); sh = Math.min(vh - sy, sh);
+    // porta il ritaglio a ~1600 px di larghezza: i codici piccoli si leggono meglio ingranditi
+    const k = Math.max(0.5, Math.min(3, 1600 / sw));
+    canvas.width = Math.round(sw * k); canvas.height = Math.round(sh * k);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+  let frameN = 0;
+  async function loop() {
+    if (!stream) return;
+    if (!busy && !document.hidden && $("viewScan").classList.contains("on")) {
+      busy = true;
+      try {
+        let img = cropWindow();
+        if (img && (frameN++ % 2)) img = equalize(img); // un frame sì e uno no: contrasto equalizzato
+        if (img) {
+          const res = await ZXingWASM.readBarcodes(img, READ_OPTS);
+          handleTexts(res.filter(r => r.isValid).map(r => r.text));
+        }
+      } catch (e) { /* frame scartato */ }
+      busy = false;
+    }
+    setTimeout(loop, 90);
+  }
+
+  // ---------- Da foto ----------
+  // Equalizzazione dell'istogramma in scala di grigi
+  function equalize(img) {
+    const d = img.data, n = d.length / 4, hist = new Uint32Array(256), lum = new Uint8Array(n);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) { const l = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; lum[j] = l; hist[l]++; }
+    const map = new Uint8Array(256); let acc = 0;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; map[v] = Math.round(255 * acc / n); }
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) d[i] = d[i + 1] = d[i + 2] = map[lum[j]];
+    return img;
+  }
+  // Disegna una regione (frazioni 0..1) dell'immagine, ruotata e scalata alla larghezza data
+  function region(bmp, fx, fy, fw, fh, outW, angle = 0) {
+    const sx = bmp.width * fx, sy = bmp.height * fy, sw = bmp.width * fw, sh = bmp.height * fh;
+    const k = outW / sw, w = Math.round(sw * k), h = Math.round(sh * k);
+    const rad = angle * Math.PI / 180, cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    const c = document.createElement("canvas");
+    c.width = Math.round(w * cos + h * sin); c.height = Math.round(w * sin + h * cos);
+    const cx = c.getContext("2d", { willReadFrequently: true });
+    cx.fillStyle = "#808080"; cx.fillRect(0, 0, c.width, c.height);
+    cx.translate(c.width / 2, c.height / 2); cx.rotate(rad);
+    cx.drawImage(bmp, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+    return cx.getImageData(0, 0, c.width, c.height);
+  }
+  async function decodeImageFile(file) {
+    const bmp = await createImageBitmap(file);
+    const texts = new Set();
+    const found = () => [...texts].some(t => parseKodakCan(t));
+    const tryImg = async img => {
+      for (const v of [img, equalize(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height))]) {
+        const res = await ZXingWASM.readBarcodes(v, { ...READ_OPTS, maxNumberOfSymbols: 8 });
+        res.filter(r => r.isValid).forEach(r => texts.add(r.text));
+        if (found()) return true;
+      }
+      return false;
+    };
+    const big = Math.max(bmp.width, bmp.height);
+    // 1) immagine intera
+    for (const side of [2000, 1400])
+      if (await tryImg(region(bmp, 0, 0, 1, 1, bmp.width * Math.min(1, side / big)))) return [...texts];
+    // 2) immagine intera ruotata (lattina inclinata)
+    for (const a of [-20, 20, -10, 10, -30, 30, -5, 5])
+      if (await tryImg(region(bmp, 0, 0, 1, 1, bmp.width * Math.min(1, 1600 / big), a))) return [...texts];
+    // 3) strisce orizzontali ingrandite (come la finestra di scansione live)
+    for (let fy = 0.25; fy <= 0.75; fy += 0.04)
+      for (const [fx, fw] of [[0.3, 0.55], [0.15, 0.7], [0.4, 0.5]])
+        if (await tryImg(region(bmp, fx, fy, fw, 0.12, 1600))) return [...texts];
+    return [...texts];
+  }
+  $("fileInput").onchange = async e => {
+    for (const f of e.target.files) {
+      try { handleTexts(await decodeImageFile(f)); } catch (err) {}
+    }
+    e.target.value = "";
+  };
+
+  // ---------- CSV / svuota ----------
+  function toCSV() {
+    const cols = ["lot", "name", "filmCode", "line", "speed", "gauge", "feet", "meters", "emulsion", "scannedAt"];
+    const head = ["lotto", "pellicola", "codice", "linea", "tipo", "formato", "piedi", "metri", "emulsione", "scansionato"];
+    return [head.join(";"), ...inventory.map(r => cols.map(c => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(";"))].join("\n");
+  }
+  function modal(html) { $("sheet").innerHTML = html; $("modal").classList.add("on"); }
+  $("modal").onclick = e => { if (e.target.id === "modal") $("modal").classList.remove("on"); };
+  $("csvBtn").onclick = () => {
+    const csv = toCSV();
+    modal(`<p><b>Esporta inventario</b> (${inventory.length} rulli)</p>
+      <textarea readonly id="csvText">${esc(csv)}</textarea>
+      <div class="row"><button class="btn" id="copyCsv">Copia</button>
+      ${window.top === window ? '<button class="btn ghost" id="dlCsv">Scarica .csv</button>' : ""}</div>`);
+    $("copyCsv").onclick = async () => {
+      try { await navigator.clipboard.writeText(csv); $("copyCsv").textContent = "Copiato"; }
+      catch (e) { $("csvText").select(); $("copyCsv").textContent = "Seleziona e copia"; }
+    };
+    if ($("dlCsv")) $("dlCsv").onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+      a.download = `inventario-pellicole-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    };
+  };
+  $("clearBtn").onclick = () => {
+    modal(`<p>Svuotare l'inventario? Verranno rimossi ${inventory.length} rulli.</p>
+      <div class="row"><button class="btn ghost" id="noBtn">Annulla</button>
+      <button class="btn" style="background:var(--red);color:#fff" id="yesBtn">Svuota</button></div>`);
+    $("noBtn").onclick = () => $("modal").classList.remove("on");
+    $("yesBtn").onclick = () => {
+      inventory = []; lots.clear(); session.length = 0; save();
+      renderSession(); renderInventory(); $("modal").classList.remove("on");
+    };
+  };
+
+  renderSession(); renderInventory();
+  window.__test = { handleTexts, decodeImageFile, get inventory() { return inventory; } };
+})();
+</script>
+</body>
+</html>
