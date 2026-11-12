@@ -34,15 +34,13 @@
   .view{display:none}.view.on{display:block}
 
   /* Camera */
-  .cam{position:relative;width:100%;aspect-ratio:3/4;max-height:50vh;border-radius:16px;overflow:hidden;background:#000}
+  .cam{position:relative;width:100%;aspect-ratio:5/2;border-radius:14px;overflow:hidden;background:#000}
   .cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  .win{position:absolute;left:7%;right:7%;top:38%;height:24%;border-radius:10px;
-    box-shadow:0 0 0 9999px rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.85);transition:border-color .15s, box-shadow .15s}
+  .win{position:absolute;inset:0;border-radius:14px;border:2px solid rgba(255,255,255,.75);transition:border-color .15s, box-shadow .15s;pointer-events:none}
   .win::after{content:"";position:absolute;left:8px;right:8px;top:50%;height:1px;background:rgba(226,64,44,.8)}
-  .win.hit{border-color:var(--ok);box-shadow:0 0 0 9999px rgba(0,0,0,.55),0 0 0 4px rgba(60,207,122,.35) inset}
-  .camhint{position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:13px;color:#ddd;text-shadow:0 1px 3px #000}
-  .camoff{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
-    padding:24px;text-align:center;color:var(--muted)}
+  .win.hit{border-color:var(--ok);box-shadow:0 0 0 4px rgba(60,207,122,.45) inset}
+  .camhint{text-align:center;font-size:13px;color:var(--muted);margin-top:8px}
+  .camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#111}
   .camoff p{margin:0;max-width:300px}
   .btn{border:0;border-radius:12px;padding:12px 16px;font:600 15px inherit;font-family:inherit;color:#000;background:var(--kodak)}
   .btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--line)}
@@ -50,8 +48,7 @@
   .btn.danger{background:transparent;color:var(--red);border:1px solid #4a2520}
   .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .row .btn{flex:1}
-  .iconbtn{position:absolute;top:10px;width:40px;height:40px;border-radius:20px;border:0;
-    background:rgba(0,0,0,.5);color:#fff;font-size:18px;display:grid;place-items:center}
+  .iconbtn{flex:none;width:46px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:#fff;font-size:18px}
 
   /* Lists */
   h2{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:18px 0 8px;font-weight:600}
@@ -113,19 +110,16 @@
     <div class="cam" id="cam">
       <video id="video" playsinline muted autoplay></video>
       <div class="win" id="win"></div>
-      <div class="camhint" id="camhint" hidden>Inquadra i codici a barre dell'etichetta</div>
-      <button class="iconbtn" id="torchBtn" style="right:10px" hidden aria-label="Torcia">🔦</button>
-      <button class="iconbtn" id="soundBtn" style="left:10px" aria-label="Suono">🔔</button>
-      <div class="camoff" id="camoff">
-        <p id="camoffText">Punta la fotocamera sull'etichetta della lattina: i rulli vengono aggiunti da soli.</p>
-        <button class="btn" id="startBtn">Avvia fotocamera</button>
-      </div>
+      <div class="camoff" id="camoff"><button class="btn" id="startBtn">Avvia fotocamera</button></div>
     </div>
+    <div class="camhint" id="camhint">Inquadra nel riquadro i codici a barre dell'etichetta</div>
     <div class="row">
       <label class="btn ghost" style="text-align:center">
         Scansiona da foto
         <input type="file" id="fileInput" accept="image/*" multiple hidden>
       </label>
+      <button class="iconbtn" id="torchBtn" hidden aria-label="Torcia">🔦</button>
+      <button class="iconbtn" id="soundBtn" aria-label="Suono">🔔</button>
     </div>
     <h2>Aggiunti in questa sessione</h2>
     <ul class="list" id="sessionList"></ul>
@@ -212,7 +206,10 @@ const WASM_B64 = "__WASM_B64__";
     const w = $("win"); w.classList.add("hit"); setTimeout(() => w.classList.remove("hit"), 450);
     beep();
   }
+  const lastFlash = {};
   function flashExisting(lot) {
+    if (Date.now() - (lastFlash[lot] || 0) < 2000) return; // lattina ancora inquadrata: niente lampeggio continuo
+    lastFlash[lot] = Date.now();
     const el = document.querySelector(`[data-lot="${lot}"]`);
     if (el && !el.classList.contains("flash")) {
       el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 700);
@@ -238,6 +235,7 @@ const WASM_B64 = "__WASM_B64__";
   function renderSession(animateFirst) {
     $("sessionList").innerHTML = session.map((r, i) => itemHTML(r, animateFirst && i === 0)).join("");
     $("sessionEmpty").hidden = session.length > 0;
+    setTimeout(() => document.querySelectorAll(".item.new").forEach(e => e.classList.remove("new")), 400);
   }
   function renderInventory() {
     $("invCount").textContent = inventory.length;
@@ -307,7 +305,7 @@ const WASM_B64 = "__WASM_B64__";
     } catch (e) { return camUnavailable(e); }
     video.srcObject = stream;
     await video.play().catch(() => {});
-    $("camoff").hidden = true; $("camhint").hidden = false;
+    $("camoff").hidden = true;
     const track = stream.getVideoTracks()[0];
     try {
       const caps = track.getCapabilities?.() || {};
@@ -318,7 +316,7 @@ const WASM_B64 = "__WASM_B64__";
     loop();
   }
   function camUnavailable() {
-    $("camoffText").textContent = "Fotocamera live non disponibile in questa finestra. Apri la pagina in Safari (via https) oppure usa “Scansiona da foto”.";
+    $("camhint").textContent = "Fotocamera live non disponibile qui: apri la pagina in Safari (https) oppure usa “Scansiona da foto”.";
     $("startBtn").hidden = true;
   }
   $("startBtn").onclick = startCamera;
@@ -335,7 +333,7 @@ const WASM_B64 = "__WASM_B64__";
     const scale = Math.max(cam.width / vw, cam.height / vh);
     const ox = (cam.width - vw * scale) / 2, oy = (cam.height - vh * scale) / 2;
     // margine extra per non tagliare i bordi del codice
-    const padX = win.width * 0.06, padY = win.height * 0.25;
+    const padX = win.width * 0.02, padY = win.height * 0.05;
     let sx = (win.left - cam.left - ox - padX) / scale, sy = (win.top - cam.top - oy - padY) / scale;
     let sw = (win.width + 2 * padX) / scale, sh = (win.height + 2 * padY) / scale;
     sx = Math.max(0, sx); sy = Math.max(0, sy); sw = Math.min(vw - sx, sw); sh = Math.min(vh - sy, sh);
